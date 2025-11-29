@@ -1,9 +1,9 @@
 /*
- * Stash Tile 脚本：Cloudflare 优选 IP
- * 点击面板即可运行一次，显示 Top 2 优选 IP
- */
 
-// ================= MD5 算法部分 (保持不变) =================
+作者@ZenMoFiShi
+修改：只在通知中反馈3个优选ip，去掉写入节点分部
+
+*/
 function md5cycle(x, k) {
   let a = x[0], b = x[1], c = x[2], d = x[3];
   function cmn(q, a, b, x, s, t) {
@@ -147,89 +147,70 @@ function md5(s) {
   return hex(md51(s));
 }
 
-// ================= API 请求配置 =================
 const time = Date.now().toString();
 const key = md5(md5("DdlTxtN0sUOu") + "70cloudflareapikey" + time);
+
 const url = `https://api.uouin.com/index.php/index/Cloudflare?key=${key}&time=${time}`;
+
 const myRequest = { url, method: "GET" };
 
-// ================= 核心逻辑 =================
-
-function getBestTwoIPs(info) {
-  // 1. 过滤丢包 (loss) 不为 0.00% 的节点
+// ===== ping + 带宽综合评分, 返回得分最高的前3个IP对象数组 =====
+function getBestIPs(info) {
   const valid = info.filter(i => i.loss === "0.00%");
-  
-  // 2. 计算分数
   const arr = valid.map(i => {
+    // 确保 ping 和 bandwidth 是数字
     let p = parseFloat(i.ping);
-    let bw = parseFloat(i.bandwidth.replace("mb",""));
-    // 评分公式：延迟越低分越高，带宽越高分越高
+    // 移除 "mb" 并转换为数字
+    let bw = parseFloat(i.bandwidth.replace("mb","")); 
+    
+    // 检查 p 或 bw 是否是 NaN，如果是则忽略该数据或设置为0
+    if (isNaN(p) || isNaN(bw)) {
+        return { ip: i.ip, ping: NaN, bw: NaN, score: -Infinity }; // 使用负无穷大分数使其排在最后
+    }
+
+    // 综合评分公式：(100 - Ping) * 0.5 + 带宽 * 0.5
     let score = (100 - p) * 0.5 + bw * 0.5;
     return { ip: i.ip, ping: p, bw, score };
-  });
-
-  // 3. 排序 (分数从高到低)
+  }).filter(i => i.score !== -Infinity); // 过滤掉无效数据
+  
+  // 按得分降序排序
   arr.sort((a,b) => b.score - a.score);
-
-  // 4. 返回前两个
-  return arr.slice(0, 2);
+  
+  // 返回前3个IP
+  return arr.slice(0, 3);
 }
-
-// ================= Stash Tile 执行部分 =================
 
 $task.fetch(myRequest).then(resp => {
   try {
     let raw = resp.body;
-    if (!raw) {
-      $done({ title: "CF优选", content: "错误: 无响应", icon: "exclamationmark.triangle" });
-      return;
-    }
+    if (!raw) return $done($notify("获取失败", "无响应"));
 
     let data = JSON.parse(raw).data;
-    if (!data || !data.cmcc || !data.cmcc.info) {
-      $done({ title: "CF优选", content: "错误: 数据为空", icon: "xmark.octagon" });
-      return;
-    }
+    if (!data || !data.cmcc || !data.cmcc.info)
+      return $done($notify("获取失败", "无数据"));
 
-    // 获取最优 IP
-    let bestIPs = getBestTwoIPs(data.cmcc.info);
-
-    if (bestIPs.length === 0) {
-      $done({ title: "CF优选", content: "无可用节点", icon: "xmark.circle" });
-      return;
-    }
-
-    // 格式化输出内容供 Tile 显示
-    // 格式：
-    // 1. IP (Ping)
-    // 2. IP (Ping)
-    let contentList = bestIPs.map((item, index) => {
-      // 保留一位小数的Ping值
-      let p = Math.round(item.ping); 
-      return `${index + 1}. ${item.ip} (${p}ms)`;
-    });
-
-    let displayContent = contentList.join("\n");
-
-    // Stash Tile 完成回调
-    // title: 标题
-    // content: 显示的文本
-    // icon: 图标 (SF Symbols)
-    // label: 标题栏右侧的小字 (显示更新时间)
+    // 获取优选的运营商（此处为 cmcc，可自行更改）的前3个IP
+    let bestIPs = getBestIPs(data.cmcc.info);
     
-    let now = new Date();
-    let timeStr = `${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
+    if (bestIPs.length === 0) {
+      return $done($notify("无可用优选IP", "所有IP丢包率均为 0.00% 的IP不足或数据异常"));
+    }
 
-    $done({
-      title: "Cloudflare 优选 IP",
-      content: displayContent,
-      icon: "network", // 可选图标: bolt.horizontal, server.rack, icloud
-      label: timeStr
-    });
+    // 格式化通知内容
+    let detail = bestIPs.map((item, index) => 
+      `Top ${index + 1}: ${item.ip}\nPing: ${item.ping.toFixed(2)}ms, 带宽: ${item.bw.toFixed(2)}mb`
+    ).join("\n---\n");
+    
+    // 发送通知
+    $notify(
+      "Cloudflare优选ip · 前3优选结果",
+      `已为您找到得分最高的前 ${bestIPs.length} 个IP`,
+      detail
+    );
+    $done();
 
-  } catch(e) {
-    $done({ title: "CF优选", content: "脚本异常", icon: "exclamationmark.triangle" });
+  } catch(e){
+    $notify("脚本异常", "", String(e));
+    $done();
   }
-}, reason => {
-  $done({ title: "CF优选", content: "网络请求失败", icon: "wifi.slash" });
 });
