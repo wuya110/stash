@@ -1,25 +1,19 @@
-# Configuration File Name (配置文件的名称)
-name: 📺 小电视独立配置
-desc: 这是一个只包含小电视磁贴的独立配置。
-category: tile
-# 使用一个通用的图标
-icon: https://raw.githubusercontent.com/fmccsc/resources/master/image/icon/tv.png
-
 # --------------------------
 # 磁贴定义 (tiles)
 # --------------------------
 tiles:
-  - name: tv-tile
+  # 更改 name 以确保唯一性，并使用一个通用图标
+  - name: tv-switcher-01 
     label: 📺 我的小电视
     # 模拟电视机边框的颜色，深蓝色
     backgroundColor: "#203040" 
-    # SF Symbol 图标
-    icon: tv.fill
+    # 更改 SF Symbol 图标，使用更通用的网络图标
+    icon: globe
     # 图标颜色为白色
     iconColor: "#FFFFFF"
     # 刷新频率设为0，只在点击时运行
     interval: 0 
-    # 关键：显式链接到下面的 'tv-script' 提供者
+    # 关键：仍然链接到 'tv-script' 提供者
     script-provider-name: tv-script 
     # 传递给脚本的参数，用于保存当前频道状态
     argument: |-
@@ -29,10 +23,8 @@ tiles:
 # 脚本提供者定义 (script-providers)
 # --------------------------
 script-providers:
-  # 小电视脚本提供者 (名称必须是 tv-script)
+  # 小电视脚本提供者 (名称保持不变)
   tv-script:
     # 您的 GitHub RAW 链接
     url: https://raw.githubusercontent.com/wuya110/stash/refs/heads/main/tv_tile.js 
-    # 脚本文件本身的更新频率（例如每天更新）
     interval: 86400
-
