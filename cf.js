@@ -2,6 +2,7 @@
 
 作者@ZenMoFiShi
 修改：使用您提供的完整异步模板结构，确保将前3个优选IP日志作为脚本的最终 Result: (面板) 输出。
+优化：调整返回对象的结构，增加 label 和 subtitle 字段，以实现 Stash Tile 的最佳显示效果。
 
 */
 
@@ -347,23 +348,44 @@ async function main() {
       };
     }
 
-    // 格式化面板内容
+    // --- ⬇️ 这里是修改后的返回代码块，用于 Tile 优化 ⬇️ ---
+
+    // 格式化面板内容 (作为 content 字段的详细 Logs)
+    // 简化格式，避免过多嵌套，使 content 区域更清晰
     let logLines = bestIPs.map((item, index) => 
-      `  [INFO] Top ${index + 1} IP: ${item.ip}\n  [DETAIL] Ping: ${item.ping.toFixed(2)}ms / BW: ${item.bw.toFixed(2)}mb`
+      // 简洁格式：序号. IP 地址 (Ping / BW)
+      `${index + 1}. ${item.ip}\n   Ping: ${item.ping.toFixed(2)}ms / BW: ${item.bw.toFixed(2)}mb`
     );
     
-    // 构造最终的 Result 面板对象的内容，并在末尾添加 }
-    let panelContent = `Logs:\n\n${logLines.join("\n\n")}\n\n[SUCCESS] Cloudflare 优选IP结果已输出 (${bestIPs.length}个)。\n}`; 
+    // 构造最终的 Result 面板对象的内容 (Content)
+    let panelContent = `优选 IP 结果 (${bestIPs.length}个):\n\n${logLines.join("\n\n")}\n}`; 
     
     echo(`[END] 脚本成功完成，已输出结果到 Result。`);
 
-    // 返回面板对象，它将被显示在 Result 区域
+    // 获取 Top 1 IP 的关键信息，用于 Tile 的主显示
+    const top1IP = bestIPs[0].ip;
+    const top1Ping = bestIPs[0].ping.toFixed(2);
+    const top1BW = bestIPs[0].bw.toFixed(2);
+
+    // 返回面板对象，它将被显示在 Result 区域和 Tile 面板上
     return {
-        title: `✅ Cloudflare 优选 IP (${bestIPs.length}个)`,
+        // 1. label: Tile 上的主标题（Top 1 IP 地址）
+        label: top1IP, 
+        
+        // 2. subtitle: Tile 上的副标题（Top 1 IP 的 Ping/BW）
+        subtitle: `Ping: ${top1Ping}ms / BW: ${top1BW}mb`,
+        
+        // 3. title: 面板头部的标题 (保留)
+        title: `✅ Cloudflare 优选 IP`, 
+
+        // 4. content: 所有详细 Logs
         content: panelContent,
+        
         icon: "cloud.fill",
         "icon-color": "#007aff"
     };
+    
+    // --- ⬆️ 修改后的返回代码块结束 ⬆️ ---
 
 }
 
