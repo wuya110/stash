@@ -1,9 +1,140 @@
 /*
 
 作者@ZenMoFiShi
-修改：只在通知中反馈3个优选ip，去掉写入节点分部
+修改：使用新的异步模板结构，通过 notificationPost 函返回前3个优选IP日志，去掉写入节点分部。
+关键修改：确保优选IP详情 (logLines) 被正确嵌入到通知内容 (detail) 中，并在末尾添加 '}'。
 
 */
+
+/** @namespace currency.exchange.api */
+
+/**
+ * @typedef {Object} currency.exchange.api.HTTPResponse
+ * @property {string|null} error - 错误信息，如果没有错误则为 null
+ * @property {object} response - HTTP 响应对象
+ * @property {string|null} data - 返回的数据，如果没有数据则为 null
+ */
+
+/**
+ * @typedef {function(Error|string|null, Object, string|null): void} currency.exchange.api.HTTPCallback
+ * 回调函数类型，接受错误、响应和数据作为参数。
+ * @param {Error|string|null} error - 错误信息，可以是 Error 对象、字符串或者 null
+ * @param {Object} response - HTTP 响应对象
+ * @param {string|null} data - 返回的数据，可以是字符串或者 null
+ */
+
+/**
+ * @typedef {function(Object, currency.exchange.api.HTTPCallback): currency.exchange.api.HTTPResponse} currency.exchange.api.HTTPMethod
+ */
+
+/**
+ * @typedef {Object} currency.exchange.api.HttpClient
+ * @property {currency.exchange.api.HTTPMethod} get - 发送 GET 请求
+ * @property {currency.exchange.api.HTTPMethod} post - 发送 POST 请求
+ * @property {currency.exchange.api.HTTPMethod} put - 发送 PUT 请求
+ * @property {currency.exchange.api.HTTPMethod} delete - 发送 DELETE 请求
+ */
+
+/** @type {currency.exchange.api.HttpClient} */
+var $httpClient;
+
+var $request, $response, $notification, $argument, $persistentStore, $script
+
+/** @type {function(Object):void} */
+var $done
+
+/**
+ * 对异步回调的 HTTP 调用包装成 async 函数
+ * @param {'GET'|'POST'|'PUT'|'DELETE'} method - HTTP 方法类型，支持 GET、POST、PUT 和 DELETE
+ * @param {Object} params - 请求参数对象，包含请求所需的各类信息
+ * @returns {Promise<currency.exchange.api.HTTPResponse>} 返回一个 Promise，解析为包含 error、response 和 data 的对象
+ * @throws {Error} 如果请求失败，Promise 会被拒绝并返回错误信息
+ */
+async function request(method, params) {
+    return new Promise((resolve, reject) => {
+        /** @type {currency.exchange.api.HTTPMethod} */
+        const httpMethod = $httpClient[method.toLowerCase()]; // 通过 HTTP 方法选择对应的请求函数
+        httpMethod(params, (error, response, data) => {
+            if (error) {
+                console.log(`Error: ${error}, Response: ${JSON.stringify(response)}, Data: ${data}`);
+                reject({ error, response, data }); // 请求失败，拒绝 Promise
+            } else {
+                resolve({ error, response, data }); // 请求成功，解析 Promise
+            }
+        });
+    });
+}
+
+/**
+ * 请求封装
+ * @param {object} params
+ * @returns {Promise<currency.exchange.api.HTTPResponse>}
+ */
+async function get(params) {
+    return request('GET', params);
+}
+
+/**
+ * 解析 json 字符串， 失败返回 null
+ * @param {*} string 
+ * @returns 
+ */
+function parseJsonBody(string) {
+    try {
+        return JSON.parse(string)
+    } catch (e) {
+        console.log(`[Warn] invalid json: ${e}, json: ${string}`)
+        return null
+    }
+}
+
+/**
+ * 将指定日期对象转为相应的日期时间字符串
+ * @param {Date|null} [date=null] 
+ * @returns {string} 表示当前时间的字符串
+ */
+function getLocalDateString(date = null) {
+    if (!date) {
+        date = new Date()
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份从0开始，所以加1
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}.${month}.${day} ${hours}:${minutes}:${seconds}`;
+}
+
+/**
+ * @param {...any} args - Arguments to log
+ */
+function echo(...args) {
+    let date = getLocalDateString()
+    let logMessage = `${args.join(' ')}`
+    logMessage = `[${date}] ${logMessage}`
+    console.log(logMessage)
+}
+
+/**
+ * 发送 stash 通知
+ * @param {string} title 
+ * @param {string} subtitle 
+ * @param {string} content 
+ * @param {string|undefined} [url] 
+ */
+function notificationPost(title, subtitle, content, url) {
+    const params = url ? { url } : {};
+    $notification.post(title, subtitle, content, params)
+}
+
+// =========================================================================
+//                  Cloudflare 优选 IP 脚本核心逻辑
+// =========================================================================
+
+// --- MD5 函数（原样保留） ---
+
 function md5cycle(x, k) {
   let a = x[0], b = x[1], c = x[2], d = x[3];
   function cmn(q, a, b, x, s, t) {
@@ -147,31 +278,21 @@ function md5(s) {
   return hex(md51(s));
 }
 
-const time = Date.now().toString();
-const key = md5(md5("DdlTxtN0sUOu") + "70cloudflareapikey" + time);
-
-const url = `https://api.uouin.com/index.php/index/Cloudflare?key=${key}&time=${time}`;
-
-const myRequest = { url, method: "GET" };
-
 // ===== ping + 带宽综合评分, 返回得分最高的前3个IP对象数组 =====
 function getBestIPs(info) {
   const valid = info.filter(i => i.loss === "0.00%");
   const arr = valid.map(i => {
-    // 确保 ping 和 bandwidth 是数字
     let p = parseFloat(i.ping);
-    // 移除 "mb" 并转换为数字
     let bw = parseFloat(i.bandwidth.replace("mb","")); 
     
-    // 检查 p 或 bw 是否是 NaN，如果是则忽略该数据或设置为0
     if (isNaN(p) || isNaN(bw)) {
-        return { ip: i.ip, ping: NaN, bw: NaN, score: -Infinity }; // 使用负无穷大分数使其排在最后
+        return { ip: i.ip, ping: NaN, bw: NaN, score: -Infinity };
     }
 
     // 综合评分公式：(100 - Ping) * 0.5 + 带宽 * 0.5
     let score = (100 - p) * 0.5 + bw * 0.5;
     return { ip: i.ip, ping: p, bw, score };
-  }).filter(i => i.score !== -Infinity); // 过滤掉无效数据
+  }).filter(i => i.score !== -Infinity);
   
   // 按得分降序排序
   arr.sort((a,b) => b.score - a.score);
@@ -180,37 +301,87 @@ function getBestIPs(info) {
   return arr.slice(0, 3);
 }
 
-$task.fetch(myRequest).then(resp => {
-  try {
-    let raw = resp.body;
-    if (!raw) return $done($notify("获取失败", "无响应"));
+// --- 通知格式化配置 ---
+const DEVICE_INFO = "iOS 26.1 (23B85)";
+const APP_INFO = "NE v1.5.4-build882 42.36MB";
+// ----------------------
 
-    let data = JSON.parse(raw).data;
-    if (!data || !data.cmcc || !data.cmcc.info)
-      return $done($notify("获取失败", "无数据"));
 
-    // 获取优选的运营商（此处为 cmcc，可自行更改）的前3个IP
-    let bestIPs = getBestIPs(data.cmcc.info);
-    
-    if (bestIPs.length === 0) {
-      return $done($notify("无可用优选IP", "所有IP丢包率均为 0.00% 的IP不足或数据异常"));
+// =========================================================================
+//                                main 函数
+// =========================================================================
+async function main() {
+    const time = Date.now().toString();
+    const key = md5(md5("DdlTxtN0sUOu") + "70cloudflareapikey" + time);
+    const api_url = `https://api.uouin.com/index.php/index/Cloudflare?key=${key}&time=${time}`;
+    const myRequest = { url: api_url, method: "GET" };
+
+    echo(`[START] 开始获取 Cloudflare 优选 IP...`);
+
+    let resp;
+    // 默认的错误详情，包含您要求的 }
+    let defaultErrorDetail = `Logs:\n  [ERROR] 脚本执行失败，请检查网络或API。\n}`;
+
+    try {
+        resp = await get(myRequest);
+    } catch (e) {
+        let detail = `Logs:\n  [FATAL] 网络请求失败: ${e.error || e.message || String(e)}\n}`;
+        notificationPost(DEVICE_INFO, APP_INFO, detail);
+        echo(`[END] 脚本结束，网络错误。`);
+        return;
     }
 
-    // 格式化通知内容
-    let detail = bestIPs.map((item, index) => 
-      `Top ${index + 1}: ${item.ip}\nPing: ${item.ping.toFixed(2)}ms, 带宽: ${item.bw.toFixed(2)}mb`
-    ).join("\n---\n");
+    let error = resp.error;
+    let data = resp.data;
+    let status = resp.response ? resp.response.status : 'N/A';
+
+    if (error || status >= 400 || !data) {
+        let detail = `Logs:\n  [ERROR] API 请求错误或无数据。Status: ${status}, Error: ${error || 'N/A'}\n}`;
+        notificationPost(DEVICE_INFO, APP_INFO, detail);
+        echo(`[END] 脚本结束，API错误。`);
+        return;
+    }
+
+    let body = parseJsonBody(data);
+    if (!body || !body.data || !body.data.cmcc || !body.data.cmcc.info) {
+        let detail = `Logs:\n  [ERROR] JSON 解析失败或数据结构异常。\n}`;
+        notificationPost(DEVICE_INFO, APP_INFO, detail);
+        echo(`[END] 脚本结束，数据解析错误。`);
+        return;
+    }
+    
+    // 获取优选的前3个IP
+    let bestIPs = getBestIPs(body.data.cmcc.info);
+
+    if (bestIPs.length === 0) {
+      let detail = "Logs:\n  [WARNING] 无可用优选IP，所有IP丢包率不为 0.00%。\n}";
+      notificationPost(DEVICE_INFO, APP_INFO, detail);
+      echo(`[END] 脚本结束，无可用IP。`);
+      return;
+    }
+
+    // 格式化通知内容为 Logs 形式 (包含 3 个 IP 的详细信息)
+    let logLines = bestIPs.map((item, index) => 
+      `  [INFO] Top ${index + 1} IP: ${item.ip}\n  [DETAIL] Ping: ${item.ping.toFixed(2)}ms / BW: ${item.bw.toFixed(2)}mb`
+    );
+    
+    // **确保 logLines 数组通过 \n 连接并嵌入 detail**
+    let detail = `Logs:\n\n${logLines.join("\n\n")}\n\n[SUCCESS] Cloudflare 优选IP结果已输出 (${bestIPs.length}个)。\n}`; 
     
     // 发送通知
-    $notify(
-      "Cloudflare优选ip · 前3优选结果",
-      `已为您找到得分最高的前 ${bestIPs.length} 个IP`,
-      detail
-    );
-    $done();
+    notificationPost(DEVICE_INFO, APP_INFO, detail);
+    echo(`[END] 脚本成功完成，已推送通知。`);
 
-  } catch(e){
-    $notify("脚本异常", "", String(e));
-    $done();
-  }
+}
+
+// 脚本执行入口
+(async () => {
+    await main();
+    // 无论成功还是失败，最终都调用 $done({}) 结束脚本
+    $done({}) 
+})().catch(error => {
+    // 兜底的错误通知
+    notificationPost(DEVICE_INFO, APP_INFO, `Logs:\n  [FATAL] 脚本运行时发生未捕获异常。\n}`);
+    echo(`[Fatal Error]: ${error?.message || error}`);
+    $done({});
 });
