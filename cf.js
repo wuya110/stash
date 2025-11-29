@@ -1,9 +1,9 @@
 /*
 
 作者@ZenMoFiShi
-修改：使用您提供的完整异步模板结构，确保将前3个优选IP日志作为脚本的最终 Result: (面板) 输出。
-优化：调整返回对象的结构，增加 label 和 subtitle 字段，以实现 Stash Tile 的最佳显示效果。
-新增：在脚本运行成功后，自动推送包含优选IP列表的系统通知，方便复制。
+版本：日志显示优化版
+功能：获取 Cloudflare 优选 IP (Top 3)，并将详细结果清晰地打印在脚本日志 (Logs) 中，方便用户复制。
+注意：移除了系统通知功能。
 
 */
 
@@ -18,10 +18,6 @@
 
 /**
  * @typedef {function(Error|string|null, Object, string|null): void} currency.exchange.api.HTTPCallback
- * 回调函数类型，接受错误、响应和数据作为参数。
- * @param {Error|string|null} error - 错误信息，可以是 Error 对象、字符串或者 null
- * @param {Object} response - HTTP 响应对象
- * @param {string|null} data - 返回的数据，可以是字符串或者 null
  */
 
 /**
@@ -44,43 +40,26 @@ var $request, $response, $notification, $argument, $persistentStore, $script
 /** @type {function(Object):void} */
 var $done
 
-/**
- * 对异步回调的 HTTP 调用包装成 async 函数
- * @param {'GET'|'POST'|'PUT'|'DELETE'} method - HTTP 方法类型，支持 GET、POST、PUT 和 DELETE
- * @param {Object} params - 请求参数对象，包含请求所需的各类信息
- * @returns {Promise<currency.exchange.api.HTTPResponse>} 返回一个 Promise，解析为包含 error、response 和 data 的对象
- * @throws {Error} 如果请求失败，Promise 会被拒绝并返回错误信息
- */
 async function request(method, params) {
     return new Promise((resolve, reject) => {
         /** @type {currency.exchange.api.HTTPMethod} */
-        const httpMethod = $httpClient[method.toLowerCase()]; // 通过 HTTP 方法选择对应的请求函数
+        const httpMethod = $httpClient[method.toLowerCase()]; 
         httpMethod(params, (error, response, data) => {
             if (error) {
                 console.log(`Error: ${error}, Response: ${JSON.stringify(response)}, Data: ${data}`);
-                reject({ error, response, data }); // 请求失败，拒绝 Promise
+                reject({ error, response, data }); 
             } else {
-                resolve({ error, response, data }); // 请求成功，解析 Promise
+                resolve({ error, response, data }); 
             }
         });
     });
 }
 
-/**
- * 请求封装
- * @param {object} params
- * @returns {Promise<currency.exchange.api.HTTPResponse>}
- */
 async function get(params) {
     return request('GET', params);
 }
 
 
-/**
- * 解析 json 字符串， 失败返回 null
- * @param {*} string 
- * @returns 
- */
 function parseJsonBody(string) {
     try {
         return JSON.parse(string)
@@ -90,18 +69,13 @@ function parseJsonBody(string) {
     }
 }
 
-/**
- * 将指定日期对象转为相应的日期时间字符串
- * @param {Date|null} [date=null] 
- * @returns {string} 表示当前时间的字符串
- */
 function getLocalDateString(date = null) {
     if (!date) {
         date = new Date()
     }
 
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份从0开始，所以加1
+    const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
@@ -109,9 +83,6 @@ function getLocalDateString(date = null) {
     return `${year}.${month}.${day} ${hours}:${minutes}:${seconds}`;
 }
 
-/**
- * @param {...any} args - Arguments to log
- */
 function echo(...args) {
     let date = getLocalDateString()
     let logMessage = `${args.join(' ')}`
@@ -119,11 +90,7 @@ function echo(...args) {
     console.log(logMessage)
 }
 
-// =========================================================================
-//                  Cloudflare 优选 IP 脚本核心逻辑
-// =========================================================================
-
-// --- MD5 函数 ---
+// --- MD5 函数（保持不变）---
 function md5cycle(x, k) {
   let a = x[0], b = x[1], c = x[2], d = x[3];
   function cmn(q, a, b, x, s, t) {
@@ -349,37 +316,33 @@ async function main() {
       };
     }
 
-    // --- ⬇️ 这里是修改后的返回代码块，用于 Tile 优化 ⬇️ ---
+    // --- ⬇️ 返回前的处理和日志输出 ⬇️ ---
 
     // 格式化面板内容 (作为 content 字段的详细 Logs)
-    // 简化格式，避免过多嵌套，使 content 区域更清晰
     let logLines = bestIPs.map((item, index) => 
       // 简洁格式：序号. IP 地址 (Ping / BW)
       `${index + 1}. ${item.ip}\n   Ping: ${item.ping.toFixed(2)}ms / BW: ${item.bw.toFixed(2)}mb`
     );
     
     // 构造最终的 Result 面板对象的内容 (Content)
-    let panelContent = `优选 IP 结果 (${bestIPs.length}个):\n\n${logLines.join("\n\n")}`; // 移除最后的 `\n}`
-
-    // --------------------------------------------------------
-    // ✨ 插入通知代码的位置：获取到结果后，返回面板对象前
-    // --------------------------------------------------------
+    let panelContent = `优选 IP 结果 (${bestIPs.length}个):\n\n${logLines.join("\n\n")}`; 
     
-    // 获取 Top 1 IP 的关键信息，用于通知的副标题
+    // --------------------------------------------------------
+    // ✨ 核心修改：将优选 IP 列表直接打印到脚本 Logs 中
+    // --------------------------------------------------------
+    echo(`\n========================================`);
+    echo(`  ✅ Cloudflare 优选 IP 列表 (可复制):`);
+    echo(`========================================`);
+    // 打印格式化后的 IP 列表
+    echo(panelContent);
+    echo(`========================================`);
+    
+    echo(`[END] 脚本成功完成，结果已输出到 Logs 和 Result。`);
+
+    // 获取 Top 1 IP 的关键信息，用于 Tile 的主显示
     const top1IP = bestIPs[0].ip;
     const top1Ping = bestIPs[0].ping.toFixed(2);
     const top1BW = bestIPs[0].bw.toFixed(2);
-    
-    // 自动推送通知到系统通知中心
-    $notification.post(
-      `✅ Cloudflare 优选 IP`, // 标题
-      `Top 1: ${top1IP} (Ping: ${top1Ping}ms / BW: ${top1BW}mb)`, // 副标题
-      panelContent // 正文内容 (包含所有优选IP列表)
-    );
-    
-    // --------------------------------------------------------
-
-    echo(`[END] 脚本成功完成，已推送通知并输出结果到 Result。`);
 
     // 返回面板对象，它将被显示在 Result 区域和 Tile 面板上
     return {
@@ -399,7 +362,7 @@ async function main() {
         "icon-color": "#007aff"
     };
     
-    // --- ⬆️ 修改后的返回代码块结束 ⬆️ ---
+    // --- ⬆️ 返回代码块结束 ⬆️ ---
 
 }
 
