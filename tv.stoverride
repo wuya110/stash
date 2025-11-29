@@ -18,7 +18,7 @@ tiles:
 script-providers:
   # 引用小电视脚本
   tv-script:
-    url: https://gist.githubusercontent.com/wuya110/45bbb0a177175129a4b27a8213d9bbad/raw/49f00110b4db949dce3f001860668db059f72c14/tv_tile.js # <<<<<< IMPORTANT: 将此URL替换为您实际上传脚本的URL
+    url: https://raw.githubusercontent.com/wuya110/stash/refs/heads/main/tv_tile.js # <<<<<< IMPORTANT: 将此URL替换为您实际上传脚本的URL
     # 脚本文件本身的更新频率（例如每天更新）
     interval: 86400
 
