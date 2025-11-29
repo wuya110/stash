@@ -1,25 +1,39 @@
-# ... (您现有的配置) ...
+# 确保文件头部的 name, desc, category, icon 等信息保持正确
+name: Stash 混合配置
+desc: 包含优选IP和小电视磁贴
+category: tile
+icon: https://www.cloudflare.com/favicon.ico
 
 tiles:
+  # 1. Cloudflare 优选 IP (使用隐式连接：name: cf-best-ip -> provider: cf-best-ip)
+  - name: cf-best-ip
+    label: 🚀 CF 优选 IP
+    backgroundColor: "#00CED1"
+    icon: bolt.fill
+    interval: 3600
+    argument: |-
+        {"icon":"network", "color":"#FFFFFF"}
+  
+  # 2. 小电视磁贴 (使用显式连接：name: tv-tile -> script-provider-name: tv-script)
   - name: tv-tile
     label: 📺 我的小电视
-    # 模拟电视机边框的颜色，例如深蓝色
     backgroundColor: "#203040" 
-    # 电视机图标
     icon: tv.fill
-    # 图标颜色为白色，对比背景
     iconColor: "#FFFFFF"
-    # 刷新频率设为0，表示只在点击时更新
     interval: 0 
-    # 传递给脚本的参数，用于保存当前频道状态
+    # ✨ 关键：指定这个磁贴使用下面的 'tv-script' 提供者
+    script-provider-name: tv-script 
     argument: |-
         {"channelIndex": 0} # 初始频道索引为0
 
 script-providers:
-  # 引用小电视脚本
-  tv-script:
-    url: https://raw.githubusercontent.com/wuya110/stash/refs/heads/main/tv_tile.js # <<<<<< IMPORTANT: 将此URL替换为您实际上传脚本的URL
-    # 脚本文件本身的更新频率（例如每天更新）
+  # Cloudflare 脚本提供者 (名称为 cf-best-ip)
+  cf-best-ip:
+    url: https://raw.githubusercontent.com/wuya110/stash/refs/heads/main/cf.js
     interval: 86400
-
-# ... (其他 script-providers) ...
+  
+  # 小电视脚本提供者 (名称为 tv-script)
+  tv-script:
+    # 您的 GitHub RAW 链接
+    url: https://raw.githubusercontent.com/wuya110/stash/refs/heads/main/tv_tile.js 
+    interval: 86400
