@@ -3,6 +3,7 @@
 作者@ZenMoFiShi
 修改：使用您提供的完整异步模板结构，确保将前3个优选IP日志作为脚本的最终 Result: (面板) 输出。
 优化：调整返回对象的结构，增加 label 和 subtitle 字段，以实现 Stash Tile 的最佳显示效果。
+新增：在脚本运行成功后，自动推送包含优选IP列表的系统通知，方便复制。
 
 */
 
@@ -358,14 +359,27 @@ async function main() {
     );
     
     // 构造最终的 Result 面板对象的内容 (Content)
-    let panelContent = `优选 IP 结果 (${bestIPs.length}个):\n\n${logLines.join("\n\n")}\n}`; 
-    
-    echo(`[END] 脚本成功完成，已输出结果到 Result。`);
+    let panelContent = `优选 IP 结果 (${bestIPs.length}个):\n\n${logLines.join("\n\n")}`; // 移除最后的 `\n}`
 
-    // 获取 Top 1 IP 的关键信息，用于 Tile 的主显示
+    // --------------------------------------------------------
+    // ✨ 插入通知代码的位置：获取到结果后，返回面板对象前
+    // --------------------------------------------------------
+    
+    // 获取 Top 1 IP 的关键信息，用于通知的副标题
     const top1IP = bestIPs[0].ip;
     const top1Ping = bestIPs[0].ping.toFixed(2);
     const top1BW = bestIPs[0].bw.toFixed(2);
+    
+    // 自动推送通知到系统通知中心
+    $notification.post(
+      `✅ Cloudflare 优选 IP`, // 标题
+      `Top 1: ${top1IP} (Ping: ${top1Ping}ms / BW: ${top1BW}mb)`, // 副标题
+      panelContent // 正文内容 (包含所有优选IP列表)
+    );
+    
+    // --------------------------------------------------------
+
+    echo(`[END] 脚本成功完成，已推送通知并输出结果到 Result。`);
 
     // 返回面板对象，它将被显示在 Result 区域和 Tile 面板上
     return {
@@ -379,7 +393,7 @@ async function main() {
         title: `✅ Cloudflare 优选 IP`, 
 
         // 4. content: 所有详细 Logs
-        content: panelContent,
+        content: panelContent + '\n}', // 重新添加 Logs 结构结尾
         
         icon: "cloud.fill",
         "icon-color": "#007aff"
