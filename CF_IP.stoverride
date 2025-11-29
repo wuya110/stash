@@ -8,12 +8,12 @@ icon: https://www.cloudflare.com/favicon.ico
 
 tiles:
   - name: cf-best-ip
-    # 这里的 label 是面板左上角显示的名称
-    label: CF 优选
-    # Cloudflare 品牌橙色
-    backgroundColor: "#F38020"
-    # SF Symbol 图标，类似云下载的意思
-    icon: icloud.and.arrow.down
+    # 这里的 label 是面板左上角显示的名称，已添加 Emoji 🚀
+    label: 🚀 CF 优选 IP
+    # 磁贴背景颜色改为鲜亮的水鸭蓝 (DarkCyan)
+    backgroundColor: "#00CED1"
+    # SF Symbol 图标，改为闪电，表示速度
+    icon: bolt.fill
     # 自动刷新时间（秒），这里设为1小时，避免过于频繁请求
     interval: 3600
     # 传递给脚本的参数（目前脚本未用到，但保留格式）
